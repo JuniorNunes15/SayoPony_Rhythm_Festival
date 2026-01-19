@@ -20,8 +20,8 @@ int columns = 5;
 int[] keys = { 'a', 's', 'd', 'f', 'g' };
 
 // Listas das músicas
-String[] songList = { "Rakuen", "Hoshi_no_Tabiji", "Houkago_Escape", "Shion", "Uchu_Katasumi", "yamasusume"};
-String[] songListName = {"Rakuen", "Hoshi no Tabiji", "Houkago Escape", "Shion", "Uchu no Katasumi", "yama"}; // Nome real para aparecer na tela
+String[] songList = { "Rakuen", "Hoshi_no_Tabiji", "Houkago_Escape", "Shion", "Uchu_Katasumi"};
+String[] songListName = {"Rakuen", "Hoshi no Tabiji", "Houkago Escape", "Shion", "Uchu no Katasumi"}; // Nome real para aparecer na tela
 int selectedSongIndex = 0;
 String currentSongName = "";
 
