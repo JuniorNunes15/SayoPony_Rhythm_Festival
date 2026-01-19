@@ -20,8 +20,8 @@ int columns = 5;
 int[] keys = { 'a', 's', 'd', 'f', 'g' };
 
 // Listas das músicas
-String[] songList = { "Rakuen", "Hoshi_no_Tabiji", "Houkago_Escape", "Shion", "Uchu_Katasumi"};
-String[] songListName = {"Rakuen", "Hoshi no Tabiji", "Houkago Escape", "Shion", "Uchu no Katasumi"}; // Nome real para aparecer na tela
+String[] songList = { "Rakuen", "Hoshi_no_Tabiji", "Houkago_Escape", "Shion", "Uchu_Katasumi", "yamasusume"};
+String[] songListName = {"Rakuen", "Hoshi no Tabiji", "Houkago Escape", "Shion", "Uchu no Katasumi", "yama"}; // Nome real para aparecer na tela
 int selectedSongIndex = 0;
 String currentSongName = "";
 
@@ -41,6 +41,9 @@ int maxCombo = 0;
 int life = 100;
 int hitWindowPerfectMs = 80;
 int hitWindowGoodMs = 160;
+int lifeStreak = 0;
+int hitsToRecover = 20;
+
 
 // Snapping para criação de charts dentro do jogo
 int snapping = 16;
@@ -91,25 +94,46 @@ void gradientBG(color c1, color c2) {
 
 // imagens das notas
 PImage[] noteImgs = new PImage[5];
+PImage backgroundImage;
+PImage hitPerfect, hitGood, hitMiss;
+
+PFont gameFont;
+
+boolean isCountdown = false;
+float countdownStartTime = 0;
+int countdownValue = 3;
+float songStartTime = 0;
+
+boolean songVolume = false;
+
 
 void setup() {
   size(900, 700);
   frameRate(60);
   
+  gameFont = createFont("fonts/Daydream.otf", 32);
+  textFont(gameFont);
+  
   // sprite das notas
-  noteImgs[0] = loadImage("data/miina_note.png");
-  noteImgs[1] = loadImage("data/ayumin_note.png");
-  noteImgs[2] = loadImage("data/naachan_note.png");
-  noteImgs[3] = loadImage("data/shuuka_note.png");
-  noteImgs[4] = loadImage("data/yuyu_note.png");
+  noteImgs[0] = loadImage("data/star1_5x.png");
+  noteImgs[1] = loadImage("data/star1_5x.png");
+  noteImgs[2] = loadImage("data/star1_5x.png");
+  noteImgs[3] = loadImage("data/star1_5x.png");
+  noteImgs[4] = loadImage("data/star1_5x.png");
+  
+  backgroundImage = loadImage("data/pony15x.png");
   
   // Música da tela inicial/menu
-  menuMusic = new SoundFile(this, "musics/sal.mp3");
+  menuMusic = new SoundFile(this, "data/musics/Romance.mp3");
+  
+  
+  hitPerfect = loadImage("star2_5x.png");
+  hitGood = loadImage("star2_5x.png");
+  hitMiss = loadImage("star2_5x.png");
 
   animatedIndex = selectedSongIndex;
   animatedIndexPos    = selectedSongIndex;
   animatedIndexVisual = selectedSongIndex;
-
   
   hitLineY = height - 150;
   travelDistance = hitLineY - spawnY;
@@ -152,6 +176,7 @@ void pressFromArduino(int n) {
 
 //===============================TELAS PRINCIPAIS======================================================
 void draw() {
+  menuMusic.amp(0.3);
   //tocar musica de fundo
   if (estado < 2 && !editing) {
     if (!menuMusicPlaying) {
@@ -182,6 +207,11 @@ void draw() {
   if (emTransicao) {
     drawTransicaoBlur();
   }
+  if (isCountdown) {
+    drawCountdown();
+    return;
+  }
+
 
   if (running) {
     if (!paused) updateGame();
@@ -238,7 +268,7 @@ void drawTelaInicial() {
 
   // TÍTULO
   fill(80, 90, 130); // azul acinzentado
-  textSize(52);
+  textSize(30);
   text("SAYOPONY RHYTHM FESTIVAL", centerX, centerY - 190 + pulse);
 
   textSize(20);
@@ -254,7 +284,7 @@ void drawTelaInicial() {
   float fade = map(sin(frameCount * 0.06), -1, 1, 120, 200);
   fill(90, 100, 140, fade);
   textSize(22);
-  text("Pressione ENTER para começar", centerX, centerY + 20);
+  text("Pressione ENTER para iniciar", centerX, centerY + 20);
   
   // TRIÂNGULO
   float triPulse = sin(frameCount * 0.06) * 3;
@@ -272,14 +302,15 @@ void drawTelaInicial() {
   // TEXTO SECUNDÁRIO
   fill(140, 150, 180);
   textSize(16);
-  text("♪ Shio(Sal) - Sayonara Ponytail ", centerX, height - 60);
+  text("Romance de Sayonara Ponytail ", centerX, height - 60);
 }
 
 // Menu principal
 void drawMenu() {
-  background(230, 235, 255);
+  image(backgroundImage, 450, 350, 900, 700);
+  //background(230, 235, 255);
   // FUNDO EM GRADIENTE PASTEL
-  noStroke();
+  /*noStroke();
   for (int i = 0; i < height; i += 2) {
     float inter = map(i, 0, height, 0, 1);
     int c = lerpColor(
@@ -289,7 +320,7 @@ void drawMenu() {
     );
     fill(c);
     rect(width / 2, i, width, 2);
-  }
+  }*/
 
   // Movimento suave APENAS para posição
   animatedIndexPos = lerp(animatedIndexPos, selectedSongIndex, 0.12);
@@ -331,14 +362,38 @@ void drawMenu() {
     
         // NOME DA MÚSICA SELECIONADA
         if (sel) {
-          fill(255);
-          textAlign(LEFT, CENTER);
+          textAlign(CENTER);
           textSize(26);
-          float textX = width / 2 + (img.width * scale) / 2;
+        
+          String name = songListName[i];
+        
+          float textX = width / 2;
+          float textY = y + 130;
+        
+          float paddingX = 5;
+          float paddingY = 10;
+        
+          float tw = textWidth(name);
+          float th = 26;
+        
+          // caixa de fundo
+          noStroke();
+          fill(40, 40, 40, 190);
+          rectMode(CENTER);
+          rect(
+            textX - paddingX,
+            textY - paddingY,
+            tw + paddingX*5,
+            th + paddingY*3,
+            8
+          );
+        
+          // texto com leve brilho estilo UI de jogo
           fill(255, 200, 220);
-          text(songListName[i], textX + 2, y + 2);
-          fill(20);
-          text(songListName[i], textX, y);
+          text(name, textX + 2, textY + 2);
+          fill(255);
+          text(name, textX, textY);
+          rectMode(CORNER);
         }
       }
       else {
@@ -359,22 +414,24 @@ void drawMenu() {
   textSize(40);
   textSize(18);
   fill(0);
-  text("Use SETAS para escolher música - Enter para Jogar", width / 2, 30);
+  text("Use SETAS para escolher a musica e Enter para Jogar", width / 2, 30);
 }
 
 // Game Over
 void drawGameOver() {
+  //image(backgroundImage, 450, 350, 900, 700);
   fill(255);
   textSize(40);
   text("VOCE PERDEU", width/2, height/2);
   textSize(18);
   fill(180);
-  text("Pressione BACKSPACE voltar pro menu.", width/2, height - 60);
+  text("Pressione BACKSPACE para voltar pro menu.", width/2, height - 60);
+  text("Pressione R para tentar novamente.", width/2, height - 20);
 }
 
 // Terminar a musica
 void drawWinning() {
-  background(20, 20, 30);
+  //background(20, 20, 30);
   textAlign(CENTER);
   fill(255);
   float centerX = width / 2;
@@ -382,14 +439,15 @@ void drawWinning() {
 
   // Título
   textSize(40);
-  text("VOCÊ Conseguiu", centerX, centerY - 120);
+  text("MUSICA CONCLUIDA", centerX, centerY - 120);
 
   // Bloco de score
   textSize(26);
-  text("Score: " + score,    centerX, centerY - 40);
-  text("Combo: " + combo,    centerX, centerY);
-  text("Max Combo: " + maxCombo, centerX, centerY + 40);
-  text("Life: " + life,      centerX, centerY + 80);
+  text("Song  " + currentSongName, centerX, centerY - 80);
+  text("Score  " + score,    centerX, centerY - 40);
+  text("Combo  " + combo,    centerX, centerY);
+  text("Max Combo  " + maxCombo, centerX, centerY + 40);
+  text("Life  " + life,      centerX, centerY + 80);
 
   // Rodapé
   textSize(18);
@@ -448,8 +506,11 @@ void keyPressed() {
     if (keyCode == UP) selectedSongIndex = max(0, selectedSongIndex-1);
     if (keyCode == DOWN) selectedSongIndex = min(songList.length-1, selectedSongIndex+1);
     if (keyCode == ENTER || key == '\n') {
-      estado = JOGO;
-      startGame(songList[selectedSongIndex]);
+      isCountdown = true;
+      countdownStartTime = millis() / 1000.0;
+      countdownValue = 3;
+      //estado = JOGO;
+      ///startGame(songList[selectedSongIndex], songListName[selectedSongIndex]);
     }
     if (key == 'e' || key == 'E') {
       startEditor(songList[selectedSongIndex]);
@@ -471,8 +532,16 @@ void keyPressed() {
     key = 0; // evita fechar sketch
     stopAll();
   }
+  if (key == 'r' || key == 'R') {
+    if (estado == GAMEOVER) {
+      estado = JOGO;
+      gameOver = false;
+      startGame(songList[selectedSongIndex], songListName[selectedSongIndex]);
+    }
+    
+  }
   if (key == ' ') { // pausar
-    togglePause();
+    //togglePause();
   }
   if (key == 'b' || key == 'B') { // cycle snapping
     if (snapping == 4) snapping = 8;
@@ -488,7 +557,7 @@ void keyPressed() {
       boolean hit = tryHit(i);
       if (!hit) { // Nada para acertar, minima penalidade
         combo = 0;
-        life -= 1;
+        life -= 5;
         //effects.add(new HitEffect(mouseX, hitLineY, "miss"));
       }
       if (hit) {
@@ -529,7 +598,7 @@ void keyReleased() {
 }
 
 // Começando o jogo
-void startGame(String songName) {
+void startGame(String song, String songName) {
   running = true;
   editing = false;
   paused = false;
@@ -537,10 +606,40 @@ void startGame(String songName) {
   score = 0; combo = 0; maxCombo = 0; life = 100;
   notes.clear();
   chart.clear();
-  loadSongAndChart(songName);
+  loadSongAndChart(song);
   spawnNotesFromChart();
   if (music != null) music.play();
 }
+
+void drawCountdown() {
+  image(backgroundImage, 450, 350, 900, 700);
+  //background(10, 10, 20);
+
+  float now = millis() / 1000.0;
+  float elapsed = now - countdownStartTime;
+
+  int show = 3 - int(elapsed);
+
+  textAlign(CENTER, CENTER);
+  textSize(120);
+  fill(255);
+
+  if (show > 0) {
+    fill(255, 100, 150);
+    text(show, width/2, height/2);
+  } 
+  else if (show == 0) {
+    fill(255, 100, 150);
+    text("START!", width/2, height/2);
+  } 
+  else {
+    isCountdown = false;
+    estado = JOGO;
+    startGame(songList[selectedSongIndex], songListName[selectedSongIndex]);         // começa só agora
+    songStartTime = millis()/1000.0;
+  }
+}
+
 
 // Iniciando o Editor
 void startEditor(String songName) {
@@ -587,7 +686,7 @@ void loadSongAndChart(String songName) {
     println("Não conseguiu carregar música: data/musics/" + songName + ".mp3");
     music = null;
   }
-  chart.load("charts/" + songName + ".txt"); // se não existir, Chart trata
+  chart.load("data/charts/" + songName + ".txt"); // se não existir, Chart trata
 }
 
 // Spannar notas
@@ -606,6 +705,7 @@ void spawnNotesFromChart() {
 }
 
 void updateGame() {
+  
   // GAME OVER
   if(life <= 0) {
      life = 0;
@@ -645,16 +745,20 @@ void updateGame() {
 }
 
 void drawGame() {
+  image(backgroundImage, 450, 350, 900, 700);
   drawLanes();
-  drawHitLine();
-  drawGoodMinLine();
-  drawGoodMaxLine();
-
-  // desenha notas
-  for (Note n : notes) {
-    n.draw(music != null ? music.position() : millis()/1000.0);
+  if(!gameOver && !winning) {
+    drawHitLine();
+    drawGoodMinLine();
+    drawGoodMaxLine();
+    
+    // Desenha notas
+    for (Note n : notes) {
+      n.draw(music != null ? music.position() : millis()/1000.0);
+    }
+    
+    drawHUD();
   }
-  drawHUD();
 }
 
 void drawGoodMaxLine() {
@@ -668,19 +772,31 @@ void drawGoodMaxLine() {
 }
 
 void drawLanes() {
+  // === FUNDO ===
+  //imageMode(CORNER);
+  //drawFullScreenImage(gameplayBG);  // usa aquela função de scale sem distorção
+
   float laneW = width / float(columns);
+
+  // === LANES TRANSLÚCIDAS ===
+  noStroke();
   for (int i = 0; i < columns; i++) {
-    if (i % 2 == 0) fill(30);
-    else fill(28);
+    if (i % 2 == 0) fill(0, 0, 0, 170);  // preto transparente
+    else fill(0, 0, 0, 150);              // variação leve
     rect(i * laneW, 0, laneW, height);
-    // key label
-    fill(180);
-    textSize(40);
-    text((char)keys[i], i*laneW + laneW/2, hitLineY + 40);
   }
 }
 
 void drawHitLine() {
+  // === LABEL DAS TECLAS ===
+  float laneW = width / float(columns);
+  fill(220);
+  textSize(40);
+  textAlign(CENTER, CENTER);
+  for (int i = 0; i < columns; i++) {
+    text((char)keys[i], i * laneW + laneW/2, hitLineY + 40);
+  }
+  
   stroke(255, 0, 0);
   strokeWeight(3);
   line(0, hitLineY, width, hitLineY);
@@ -698,11 +814,11 @@ void drawGoodMinLine() {
 void drawHUD() {
   fill(255);
   textSize(14);
-  text("Song: " + currentSongName, 110, 20);
-  text("Score: " + score, 110, 40);
-  text("Combo: " + combo, 110, 60);
-  text("MaxCombo: " + maxCombo, 110, 80);
-  text("Life: " + life, 110, 100);
+  text("Song  " + currentSongName, 110, 20);
+  text("Score  " + score, 110, 40);
+  text("Combo  " + combo, 110, 60);
+  text("MaxCombo  " + maxCombo, 110, 80);
+  text("Life  " + life, 110, 100);
   // score bar
   fill(80);
   rect(10, 120, 200, 12);
@@ -717,6 +833,10 @@ boolean tryHit(int lane) {
   for (Note n : notes) {
     if (n.lane != lane) continue;
     if (n.hit) continue;
+    float y = n.currentY(now);
+    // só permitir notas que já estejam visíveis na tela
+    if (y < -40 || y > height + 40) continue;
+    
     float diff = abs(now - n.hitTime);
     if (diff < bestDiff) {
       bestDiff = diff;
@@ -724,6 +844,12 @@ boolean tryHit(int lane) {
     }
   }
   if (best == null) return false;
+  if (best == null) {
+    combo = 0;
+    life -= 5;   // penalidade leve por apertar vazio
+    //effects.add(new HitEffect(laneToX(lane), hitLineY, "miss"));
+    return false;
+  }
 
   int diffMs = (int)(bestDiff * 1000);
   if (diffMs <= hitWindowPerfectMs) {
@@ -732,7 +858,11 @@ boolean tryHit(int lane) {
     score += 1000 + combo*5;
     combo++;
     maxCombo = max(maxCombo, combo);
-    life = min(100, life + 1);
+    lifeStreak++;
+    if (lifeStreak >= hitsToRecover) {
+      life = min(100, life + 1);
+      lifeStreak = 0;
+    }
     if (hitSoundPerfect != null); //hitSoundPerfect.play();
     effects.add(new HitEffect(best.x, hitLineY, "perfect"));
     return true;
@@ -742,7 +872,11 @@ boolean tryHit(int lane) {
     score += 500 + combo*2;
     combo++;
     maxCombo = max(maxCombo, combo);
-    life = min(100, life + 0);
+    lifeStreak++;
+    if (lifeStreak >= hitsToRecover) {
+      life = min(100, life + 1);
+      lifeStreak = 0;
+    }
     if (hitSoundGood != null); //hitSoundGood.play();
     effects.add(new HitEffect(best.x, hitLineY, "good"));
     return true;
@@ -750,6 +884,7 @@ boolean tryHit(int lane) {
     // too late/early -> miss
     best.hit = true;
     combo = 0;
+    lifeStreak = 0;
     life -= 5;
     if (hitSoundMiss != null); //hitSoundMiss.play();
     //effects.add(new HitEffect(best.x, hitLineY, "miss"));
